@@ -1,0 +1,8 @@
+# Seznam externích Python balíčků požadovaných pro aplikaci
+Flask
+sqlalchemy
+pandas
+numpy
+
+# Ovladač pro připojení k PostgreSQL databázi (používaný SQLAlchemy)
+psycopg2-binary

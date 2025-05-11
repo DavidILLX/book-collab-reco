@@ -1,0 +1,8 @@
+# Seznam externích Python balíčků požadovaných pro aplikaci
+pandas
+numpy
+kaggle
+sqlalchemy
+
+# Ovladač pro připojení k PostgreSQL databázi (používaný SQLAlchemy)
+psycopg2-binary

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zadání knihy a autora</title>
+    <style>
+        /* Základní styly pro body - centrování obsahu */
+        body {
+            font-family: sans-serif;
+            display: flex; /* Použijeme Flexbox pro centrování */
+            flex-direction: column; /* Uspořádáme prvky do sloupce */
+            align-items: center; /* Centrování horizontálně */
+            justify-content: flex-start; /* Zarovnání nahoru, ne na střed vertikálně */
+            min-height: 100vh; /* Minimální výška na celou výšku okna */
+            margin: 0; /* Odstranění výchozího okraje body */
+            background-color: #f4f4f4; /* Světle šedé pozadí */
+            color: #333; /* Tmavý text */
+            padding-top: 40px; /* Přidáme trochu místa nahoře */
+        }
+
+        /* Styly pro nadpis h1 - centrování textu */
+        h1 {
+            text-align: center; /* Centrování textu v nadpisu */
+            color: #0056b3; /* Modrá barva nadpisu */
+            margin-bottom: 30px; /* Mezera pod nadpisem */
+        }
+
+        /* Styly pro kontejner formuláře */
+        .form-container {
+            background-color: #fff; /* Bílé pozadí formuláře */
+            padding: 30px; /* Vnitřní odsazení */
+            border-radius: 8px; /* Zaoblené rohy */
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); /* Jemný stín */
+            display: flex; /* Flexbox pro uspořádání prvků formuláře */
+            flex-direction: column; /* Prvky ve sloupci */
+            gap: 15px; /* Mezera mezi prvky */
+            width: 100%; /* Šířka kontejneru */
+            max-width: 400px; /* Maximální šířka */
+            box-sizing: border-box; /* Zahrnout padding do šířky */
+            margin-bottom: 30px; /* Mezera pod formulářem */
+        }
+
+        /* Styly pro samotný formulář */
+        #recommendationForm {
+            display: flex; /* Použijeme Flexbox pro uspořádání prvků uvnitř formuláře */
+            flex-direction: column; /* Prvky (skupiny polí a tlačítko) pod sebou */
+            gap: 15px; /* Mezera mezi prvky formuláře */
+            align-items: center; /* Centrování prvků (včetně tlačítka) horizontálně */
+            width: 100%; /* Formulář zabere celou šířku kontejneru */
+        }
+
+        /* Styly pro skupinu label + input */
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            width: 100%; /* Zajistí, že skupiny polí zaberou celou šířku formuláře */
+        }
+
+        /* Styly pro popisky (labels) */
+        label {
+            margin-bottom: 5px; /* Mezera pod popiskem */
+            font-weight: bold; /* Tučné písmo */
+            color: #555; /* Tmavší šedá pro popisky */
+        }
+
+        /* Styly pro textová pole (inputs) */
+        input[type="text"] {
+            padding: 10px; /* Vnitřní odsazení textového pole */
+            border: 1px solid #ccc; /* Šedý okraj */
+            border-radius: 4px; /* Zaoblené rohy pole */
+            font-size: 1rem; /* Velikost písma */
+            width: 100%; /* Šířka pole na celou šířku skupiny */
+            box-sizing: border-box; /* Zahrnout padding a border do šířky */
+        }
+
+        /* Styl při najetí myši na pole */
+        input[type="text"]:focus {
+            border-color: #007bff; /* Modrý okraj při fokusu */
+            outline: none; /* Odstranění výchozího obrysu */
+            box-shadow: 0 0 5px rgba(0, 123, 255, 0.2); /* Jemný modrý stín */
+        }
+
+        /* Styly pro tlačítko */
+        button {
+            background-color: #007bff; /* Modré pozadí tlačítka */
+            color: white; /* Bílý text */
+            padding: 10px 20px; /* Vnitřní odsazení */
+            border: none; /* Bez okraje */
+            border-radius: 4px; /* Zaoblené rohy */
+            font-size: 1rem; /* Velikost písma */
+            cursor: pointer; /* Změna kurzoru na ruku */
+            transition: background-color 0.3s ease; /* Plynulý přechod barvy */
+            /* margin-top: 10px; */ /* Volitelná mezera nad tlačítkem */
+            /* margin-bottom: 10px; */ /* Volitelná mezera pod tlačítkem */
+            /* display: block; */ /* Tlačítko jako blokový prvek */
+        }
+
+        /* Styl při najetí myši na tlačítko */
+        button:hover {
+            background-color: #0056b3; /* Tmavší modrá při najetí */
+        }
+
+        /* Styly pro kontejner výsledků */
+        #results {
+            margin-top: 20px; /* Mezera nad výsledky */
+            padding: 20px; /* Vnitřní odsazení */
+            background-color: #fff; /* Bílé pozadí */
+            border-radius: 8px; /* Zaoblené rohy */
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); /* Jemný stín */
+            width: 100%; /* Šířka kontejneru */
+            max-width: 400px; /* Maximální šířka */
+            box-sizing: border-box; /* Zahrnout padding do šířky */
+            min-height: 100px; /* Minimální výška */
+            text-align: center; /* Centrování textu uvnitř */
+            display: flex; /* Flexbox pro centrování obsahu */
+            flex-direction: column; /* Prvky ve sloupci */
+            align-items: center; /* Centrování horizontálně */
+            justify-content: center; /* Centrování vertikálně */
+        }
+
+         /* Styly pro nadpis výsledků */
+        #results h2 {
+            margin-top: 0; /* Bez horního okraje */
+            color: #0056b3; /* Modrá barva */
+            margin-bottom: 15px; /* Mezera pod nadpisem */
+        }
+
+         /* Styly pro seznam doporučení (pokud bude seznam) */
+        #results ul {
+            list-style: none; /* Bez odrážek */
+            padding: 0; /* Bez vnitřního odsazení */
+            text-align: left; /* Zarovnání textu doleva */
+            width: 100%; /* Šířka na celou šířku */
+        }
+
+        #results li {
+            background-color: #e9ecef; /* Světle šedé pozadí položky */
+            padding: 10px; /* Vnitřní odsazení */
+            margin-bottom: 8px; /* Mezera mezi položkami */
+            border-radius: 4px; /* Zaoblené rohy */
+            border-left: 4px solid #007bff; /* Modrý levý okraj */
+            word-wrap: break-word; /* Zalamování dlouhých slov */
+        }
+
+    </style>
+</head>
+<body>
+
+    <h1>Enter your favorite book</h1>
+
+    <div class="form-container">
+        <form id="recommendationForm" method="POST">
+            <div class="form-group">
+                <label for="bookTitle">Book:</label>
+                <input type="text" id="bookTitle" name="bookTitle" placeholder="Enter book title">
+            </div>
+
+            <div class="form-group">
+                <label for="bookAuthor">Author:</label>
+                <input type="text" id="bookAuthor" name="bookAuthor" placeholder="Enter author name">
+            </div>
+
+            <button type="submit">Get Recommendation</button>
+        </form>
+    </div>
+
+    <div id="results">
+        <h2>Recommendations</h2>
+        {% if results %}
+            <div class="results">
+                <ul>
+                    {% for book in results %}
+                        <li>{{ book["Book-Title"] }} by {{ book["Book-Author"] }}</br> ISBN: {{ book["ISBN"] }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+        {% with messages = get_flashed_messages() %}
+            {% for message in messages %}
+                <p>{{ message }}</p>
+            {% endfor %}
+        {% endwith %}
+</body>
+</html>

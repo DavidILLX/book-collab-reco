@@ -1,0 +1,70 @@
+services:
+  pgadmin:
+    image: dpage/pgadmin4
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    networks:
+      - mine_network 
+    depends_on:
+      - db
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+  db:
+    image: postgres:13
+    restart: always
+    environment: # Nastavení proměnných prostředí pro konfiguraci PostgreSQL
+      POSTGRES_DB: database
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: root
+    ports:
+      - "5432:5432"
+    networks:
+      - mine_network
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db_init/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  app_flask:
+    restart: always
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      DATABASE_URL: postgresql://flask_user:flask_pass@db:5432/database
+      FLASK_ENV: development
+      FLASK_APP: flask_app.py
+      FLASK_DEBUG: 1
+    volumes:
+      - ./app:/app
+    networks:
+      - mine_network
+    depends_on:
+      - db
+
+  app_etl:
+    build:
+      context: ./db_init
+      dockerfile: Dockerfile
+    volumes:
+      - ./db_init:/db_init
+      - ./db_init:/root/.config/kaggle
+    networks:
+      - mine_network
+    depends_on:
+      - db
+
+networks:
+  mine_network:
+    driver: bridge
+
+volumes:
+  db_data:
+  pgadmin_data:
+  app_etl:
