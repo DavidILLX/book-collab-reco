@@ -17,7 +17,7 @@ services:
   db:
     image: postgres:13
     restart: always
-    environment: # Nastavení proměnných prostředí pro konfiguraci PostgreSQL
+    environment:
       POSTGRES_DB: database
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: root
@@ -52,6 +52,8 @@ services:
     build:
       context: ./db_init
       dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://admin:root@db:5432/database
     volumes:
       - ./db_init:/db_init
       - ./db_init:/root/.config/kaggle

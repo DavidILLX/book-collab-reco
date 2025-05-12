@@ -1,40 +1,62 @@
 from flask import Flask, flash, render_template, request, redirect, url_for
 import os
 from sqlalchemy import create_engine
+import re
 import pandas as pd
 import numpy as np
+import time
 
 # Zákaldní setup pro app a flash z Flask API
 app = Flask(__name__)
-app.secret_key = b'_5#y2L"F4Q8z\n\xec]/'
+app.secret_key = "SECRET"
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+books_data = None
+ratings_data = None
 
-if not DATABASE_URL:
-    print("Error ENV varible for Database is not set!")
-    engine = None
-else:
-    while True:
-        try:
-            engine = create_engine(DATABASE_URL)
-            conn = engine.connect()
-            print("Connection to database successful!")
-            break
-        except Exception as error:
-            print(f"Error when connecting to database: {error}")
-            engine = None
+def get_data():
+    global books_data, ratings_data
 
-# Načtení dat z databáze
-books_data = pd.read_sql_table("books", conn)
-ratings_data = pd.read_sql_table("ratings", conn)
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    if not DATABASE_URL:
+        print("Error ENV varible for Database is not set!")
+        engine = None
+    else:
+        while True:
+            try:
+                engine = create_engine(DATABASE_URL)
+                conn = engine.connect()
+                print("Connection to database successful!")
+                
+                books_data = pd.read_sql_table("books", conn)
+                ratings_data = pd.read_sql_table("ratings", conn)
 
-conn.close()
+                if not books_data.empty and not ratings_data.empty:
+                    print("Books and ratings data successfully loaded!")
+                    break
+                else:
+                    print("Tables not found in the database.")
+
+            except Exception as error:
+                print(f"Error when connecting to database: {error}")
+                engine = None
+                time.sleep(3)
+    conn.close()
+    return books_data, ratings_data
 
 def recommend_books(bookAuthor, bookTitle):
+    global books_data, ratings_data
     # --- Logika z book_rec.py ---
     # Collaborative filtering na základě ostatních uživatelkých recenzí, kteří mají stejnou "chut" 
-    bookAuthor = bookAuthor.lower()
-    bookTitle = bookTitle.lower()
+    
+    # Očištění inputů od uživatele whitespace, malá písmena a speciální znaky
+    bookAuthor = bookAuthor.lower().strip()
+    bookTitle = bookTitle.lower().strip()
+    
+    bookAuthor = re.sub(r"[!@#$%^\"]", "", bookAuthor)
+    bookTitle = re.sub(r"[!@#$%^\"]", "", bookTitle)
+
+    if books_data is None or ratings_data is None:
+        books_data, ratings_data = get_data()
 
     # Načtení z databáze
     books_df = books_data.copy()
@@ -67,7 +89,7 @@ def recommend_books(bookAuthor, bookTitle):
     books_to_compare = number_of_rating_per_book["Book-Title"][number_of_rating_per_book["User-ID"] >= 5]
     books_to_compare = books_to_compare.tolist()
 
-    # Dataset s každým ratingem od uživatele podle knížek které byly hodnoceny 8 a více lidmi
+    # Dataset s každým ratingem od uživatele podle knížek které byly hodnoceny 8 a více lidmi (zaměnil jsem za 5 pro testování)
     ratings_data_raw = books_of_author_readers[["User-ID", "Book-Rating", "Book-Title"]][books_of_author_readers["Book-Title"].isin(books_to_compare)]
 
     # Vypočte průměrný rating pro každou knížku od každého uživatele? 
@@ -101,7 +123,7 @@ def recommend_books(bookAuthor, bookTitle):
         correlations = []
         avg_rating = []
 
-        # Vypočítaní korelace knížky od uživatele s knížkou v datasetu
+        # Vypočítaní korelace knížky od uživatele s knížkou v datasetu skrze všechny knížky 
         # corr computation
         for book_title in list(dataset_of_other_books.columns.values):
             book_titles.append(book_title)
@@ -123,17 +145,26 @@ def recommend_books(bookAuthor, bookTitle):
 
     results = result_list[0]["Book"].tolist()
 
-    # Převede výlsedky list listů s sloupci navíc pro více informací 
-    columns_to_keep = ["ISBN", "Book-Title", "Book-Author"]
+    # Převede výlsedky na dictioniry (k:v) navíc pro více informací, uloží pouze první match s knihou
+    # V logice se knihy agregují podle Book-Title a Book-Author, takže také neřeší duplikace pro jiné ISBN 
+    # Může být jiný vítisk lépe hodnocený -> lepší překlad, ilustrace hardback/softback apod.
+    columns_to_keep = ["Book-Title", "Book-Author"]
     full_book_info = []
+    seen_titles = set()
+
     for title in results:
-        full_df = books_df[books_df["Book-Title"] == title.title()]
-        full_df = full_df[columns_to_keep]
-        full_dic = full_df.to_dict(orient="records")
-        full_book_info.extend(full_dic)
+
+        title_lower = title.lower()
+        matched_books = books_df[books_df["Book-Title"].str.lower() == title_lower]
+    
+        if title_lower in seen_titles or matched_books.empty:
+            continue
+
+        first_match = matched_books[columns_to_keep].iloc[0].to_dict()
+        full_book_info.append(first_match)
+        seen_titles.add(title_lower)
         
     results = full_book_info
-
     return results
 
 @app.route("/", methods=["POST", "GET"])
@@ -153,6 +184,21 @@ def index():
             return render_template("index.html", results = results)
     
     return render_template("index.html", results = None)
+
+@app.route("/reload", methods=["POST", "GET"])
+def reload_data():
+    global books_data, ratings_data
+    try:
+        books_data, ratings_data = get_data()
+        if books_data is not None and ratings_data is not None:
+            print("Data succesfully reloaded")
+            return redirect(url_for("index"))
+        else:
+            print("Data not reloaded!")
+            return redirect(url_for("index"))
+    except Exception as error:
+        print(f"Error: {error}")
+        return redirect(url_for("index"))
 
 if __name__ == '__main__':
     app.run(debug=True)

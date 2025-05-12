@@ -121,16 +121,15 @@ def extract_author_from_title(books_df) -> pd.DataFrame:
 
         if len(parts) == 2:
             correct_title = parts[0]
-            # The part after '\";' je začátek dat, která se posunula doleva
+            # Část po '\";' je začátek dat, která se posunula doleva
             # První prvek v 'data_to_shift_left' by měl být správný autor
             start_of_shifted_data = parts[1]
 
-            # Získáme hodnoty ze sloupců, které jsou aktuálně posunuté, začínáme od 'Book-Author'
-            # Tyto sloupce aktuálně obsahují data, která by měla být ve sloupcích vlevo
+            # Získáme hodnoty ze sloupců, které jsou aktuálně posunuté, začínáme od 'Book-Author' a posunití vpravo
             current_shifted_values = books_df.loc[index, author_columns].tolist()
 
             # První hodnota bude to, co následovalo po '\";' (správný autor)
-            # Následují hodnoty z 'current_shifted_values', posunuté o jednu pozici doleva
+            # Následují hodnoty z 'current_shifted_values', posunuté doleva
             correctly_ordered_values = [start_of_shifted_data] + current_shifted_values[:-1]
 
             # Přiřadíme opravený název knihy
@@ -192,6 +191,17 @@ def ratings_preprocessing(ratings_df, books_df) -> pd.DataFrame:
     
     return ratings_df
 
+def text_basic_preprocessing(df) -> pd.DataFrame:
+    # Obyčejní text preprocessing pro normaliziaci
+
+    filtered_columns = df.columns[~df.columns.str.contains("URL|ISBN", regex=True)]
+    df_filtered = df[filtered_columns]
+    object_columns = df_filtered.select_dtypes(include=["object"]).columns
+
+    df.loc[:, object_columns] = df[object_columns].apply(lambda col: col.str.strip().str.title())
+
+    return df
+
 def users_preprocessing(users_df) -> pd.DataFrame:
 
     # Rozdělení lokace pro normalizaci dat v databázi
@@ -206,10 +216,11 @@ def users_preprocessing(users_df) -> pd.DataFrame:
     return users_df
 
 def connect_to_db():
-    db_url = "postgresql://admin:root@db:5432/database"
+    DATABASE_URL = os.getenv("DATABASE_URL")
+
     while True:
         try:
-            engine = create_engine(db_url)
+            engine = create_engine(DATABASE_URL)
             conn = engine.connect()
             print("Connection to database successful!")
             return conn
@@ -220,11 +231,13 @@ def connect_to_db():
 def insert_into_db(users_df, ratings_df, books_df):
 
     conn = connect_to_db()
-
-    #INSERT INTO PostgreSQL
-    users_df.to_sql("users", con=conn, schema=None, if_exists="append", index=False)
-    books_df.to_sql("books", con=conn, schema=None, if_exists="append", index=False)
-    ratings_df.to_sql("ratings", con=conn, schema=None, if_exists="append", index=False)
+    try:
+        #INSERT INTO PostgreSQL
+        users_df.to_sql("users", con=conn, schema=None, if_exists="append", index=False)
+        books_df.to_sql("books", con=conn, schema=None, if_exists="append", index=False)
+        ratings_df.to_sql("ratings", con=conn, schema=None, if_exists="append", index=False)
+    except Exception as error:
+        print(f"Error when inserting rows. Error: {error}")
 
     conn.close()
     
@@ -244,10 +257,12 @@ if __name__ == "__main__":
     books_df = extract_author_from_title(books_df)
     books_df = remove_special_scharacters(books_df)
     books_df = repair_encoding(books_df) 
-    books_df = fix_publishing_year(books_df) 
+    books_df = fix_publishing_year(books_df)
+    books_df = text_basic_preprocessing(books_df)
     print("Cleaning Books data done")
 
     users_df = users_preprocessing(users_df) 
+    users_df = text_basic_preprocessing(users_df)
     print("Cleaning Users data done")
 
     ratings_df = ratings_preprocessing(ratings_df, books_df)
