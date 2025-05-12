@@ -1,4 +1,4 @@
- Ignorovat Python bytecode
+#Ignorovat Python bytecode
 *.pyc
 __pycache__/
 
