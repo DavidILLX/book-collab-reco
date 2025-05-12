@@ -1,0 +1,40 @@
+ Ignorovat Python bytecode
+*.pyc
+__pycache__/
+
+# Ignorovat virtuální prostředí
+.venv/
+venv/
+env/
+ENV/
+venv.bak/
+venv.old/
+
+# Ignorovat stažené a zpracované datové soubory (pokud se generují)
+# Předpokládáme, že syrová data se stahují do složky 'data' nebo podobně
+data/
+downloaded_data/
+processed_data/
+*.csv.gz
+*.zip
+*.tar.gz
+*.csv
+*.png
+*.json
+*.odt
+
+# Ignorovat databázové soubory
+pgdata/
+db_data/
+
+# Ignorovat soubory s proměnnými prostředí (obsahují citlivé info)
+.env
+.env.*
+*.env
+
+# Ignorovat logovací soubory
+*.log
+logs/
+
+
+
