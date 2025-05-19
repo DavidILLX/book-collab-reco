@@ -27,7 +27,7 @@ services:
       - mine_network
     volumes:
       - db_data:/var/lib/postgresql/data
-      - ./db_init/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./db_init/:/docker-entrypoint-initdb.d/
 
   app_flask:
     restart: always
@@ -50,13 +50,13 @@ services:
 
   app_etl:
     build:
-      context: ./db_init
+      context: ./etl
       dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgresql://admin:root@db:5432/database
     volumes:
-      - ./db_init:/db_init
-      - ./db_init:/root/.config/kaggle
+      - ./etl:/etl
+      - ./etl:/root/.config/kaggle
     networks:
       - mine_network
     depends_on:
@@ -70,3 +70,4 @@ volumes:
   db_data:
   pgadmin_data:
   app_etl:
+

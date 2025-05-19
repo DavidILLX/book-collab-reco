@@ -3,20 +3,34 @@ import numpy as np
 from kaggle.api.kaggle_api_extended import KaggleApi
 from datetime import date
 import os
+import logging
 from sqlalchemy import create_engine
-import time          
+import time
+import hashlib   
 
 def download_data():
-    # Smaže všechny soubory v adresáři
-    for filename in os.listdir("data/"):
-        file_path = os.path.join("data/", filename)
-        if os.path.isfile(file_path):
-            os.remove(file_path)  # Smaže soubor
+    # Vytvoří adresář, pokud neexistuje
+    directory_name = "data"
 
+    try:
+        os.mkdir(directory_name)
+        logging.info(f"Directory '{directory_name}' created successfully.")
+    except FileExistsError:
+        logging.warning(f"Directory '{directory_name}' already exists.")
+    except PermissionError:
+        logging.error(f"Permission denied: Unable to create '{directory_name}'.")
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")
+
+    # Smaže soubory pokud ve složce nějaké jsou
+    for filename in os.listdir(directory_name):
+        file_path = os.path.join(directory_name, filename)
+        if os.path.isfile(file_path):
+            os.remove(file_path)  
+
+    # Kaggle API pro stažení data setu s knihama
     api = KaggleApi()
     api.authenticate()
-
-    # Pak můžeš použít API – třeba stáhnout dataset
     api.dataset_download_files("arashnic/book-recommendation-dataset", path="data/", unzip=True)
 
 def read_data():
@@ -29,38 +43,38 @@ def read_data():
     # Pokus o načtení books
     try:
         books_df = pd.read_csv("data/Books.csv", sep=",", encoding="utf-8")
-        print(f"File Books.csv loaded. Num of rows: {len(books_df)}")
+        logging.info(f"File Books.csv loaded. Num of rows: {len(books_df)}")
     except FileNotFoundError:
-        print("Books.csv not found.")
+        logging.error("Books.csv not found.")
     except Exception as e:
-        print(f"Error while loading Books.csv: {e}")
+        logging.error(f"Error while loading Books.csv: {e}")
 
     # Pokus o načtení users
     try:
         users_df = pd.read_csv("data/Users.csv")
-        print(f"File Users.csv loaded. Num of rows: {len(users_df)}")
+        logging.info(f"File Users.csv loaded. Num of rows: {len(users_df)}")
     except FileNotFoundError:
-        print("Users.csv not found.")
+        logging.error("Users.csv not found.")
     except Exception as e:
-        print(f"Error while loading Users.csv: {e}")
+        logging.error(f"Error while loading Users.csv: {e}")
 
 
     # Pokus o načtení ratings
     try:
         ratings_df = pd.read_csv("data/Ratings.csv")
-        print(f"File Ratings.csv loaded. Num of rows: {len(ratings_df)}")
+        logging.info(f"File Ratings.csv loaded. Num of rows: {len(ratings_df)}")
     except FileNotFoundError:
-        print("Ratings.csv not found.")
+        logging.error("Ratings.csv not found.")
     except Exception as e:
-        print(f"Error while loading Ratings.csv: {e}")
+        logging.error(f"Error while loading Ratings.csv: {e}")
 
     return books_df, users_df, ratings_df
 
 def fix_special_characters(text):
 
-    # Mapa pro opravy specifických znaků
+    # Mapa pro opravy specifických znaků (provizorní, je třeba mít dostatečně dobrá data)
     char_map = {
-        # Běžné Latin-1/CP1252 znaky čtené jako UTF-8
+        # Latin-1/CP1252 znaky čtené jako UTF-8
         'Ã©': 'é',
         'Ã¨': 'è',
         'Ã­': 'í',
@@ -74,7 +88,7 @@ def fix_special_characters(text):
         'Ã£': 'ã',
         'Ãº': 'ú',
 
-        # Běžné Latin-1/CP1252 uppercase a ß čtené jako UTF-8 (často se zobrazí jako Ã? + znak)
+        # Latin-1/CP1252
         'Ã?Â¤': 'ä', 
         'Ã?Â©': 'é', 
         'Ã?Â¼': 'ü', 
@@ -87,18 +101,18 @@ def fix_special_characters(text):
         'Ã?Â?': 'Í', 
         'Ã?ÂŸ': 'ß', 
 
-        # Další běžné mojibake vzory pro španělštinu
+        # Španělština
         'Â¿': '¿', 
         'Â¡': '¡',
 
-        # České znaky
+        # Čeština
         'ÄŤ': 'č',
         'Å™': 'ř',
         'Å¡': 'š',
         'Å¾': 'ž',
         'Ãº': 'ú', 
 
-        # Příklad opravy pro 'Ã? sucesso solo 50 anni fa' - vypadá to, že 'Ã? ' by mělo být 'Il '
+        # vypadá to, že 'Ã? ' by mělo být 'Il '
         'Ã? ': 'Il ',
     }
 
@@ -107,7 +121,7 @@ def fix_special_characters(text):
             text = text.replace(wrong, correct)
     return text
 
-def extract_author_from_title(books_df) -> pd.DataFrame:
+def extract_author_from_title(books_df: pd.DataFrame) -> pd.DataFrame:
 
     mask_wrong_title = books_df["Book-Title"].str.contains(r'\\";')
     index_to_fix = books_df[mask_wrong_title].index
@@ -141,19 +155,19 @@ def extract_author_from_title(books_df) -> pd.DataFrame:
 
     return books_df
 
-def remove_special_scharacters(books_df) -> pd.DataFrame:
+def remove_special_scharacters(df: pd.DataFrame) -> pd.DataFrame:
     
     # Odstranění pozůstatků z web scrapingu
-    columns_to_change = ['Book-Title', 'Book-Author', 'Publisher']
+    columns_to_change = df.select_dtypes(include=["object"]).columns
     for col in columns_to_change:
-        books_df[col] = books_df[col].str.replace(r'\\"', '"', regex=True)
-        books_df[col] = books_df[col].str.replace(r'\\', '"', regex=True)
-        books_df[col] = books_df[col].str.replace('&amp;', ' & ', regex=False)
-        books_df[col] = books_df[col].str.strip('"')
+        df[col] = df[col].str.replace(r'\\"', '"', regex=True)
+        df[col] = df[col].str.replace(r'\\', '"', regex=True)
+        df[col] = df[col].str.replace('&amp;', ' & ', regex=False)
+        df[col] = df[col].str.strip('"')
 
     return books_df
 
-def fix_publishing_year(books_df) -> pd.DataFrame:
+def fix_publishing_year(books_df: pd.DataFrame) -> pd.DataFrame:
 
     books_df["Year-Of-Publication"] = pd.to_numeric(books_df["Year-Of-Publication"], errors="coerce")
 
@@ -170,39 +184,32 @@ def fix_publishing_year(books_df) -> pd.DataFrame:
     books_df["Year-Of-Publication"] = books_df["Year-Of-Publication"].astype("Int64")
     return books_df
 
-def repair_encoding(books_df) -> pd.DataFrame:
+def ratings_preprocessing(ratings_df: pd.DataFrame, books_df: pd.DataFrame) -> pd.DataFrame:
+    # Doplnění unikátního hashe pro databázi, detekce duplicit
+    hash_id = ratings_df["User-ID"].astype(str) + "_" + ratings_df["ISBN"].astype(str) 
+    ratings_df["Ratings-ID"] = hash_id.map(lambda x: hashlib.md5(x.encode()).hexdigest())
+    ratings_df["Ratings-ID"].drop_duplicates()
 
-    # Aplikuj funkci na sloupce s textovými daty
-    columns_to_change = ['Book-Title', 'Book-Author', 'Publisher']
-    for col in columns_to_change:
-        books_df[col] = books_df[col].apply(fix_special_characters)
-
-    return books_df
-
-def ratings_preprocessing(ratings_df, books_df) -> pd.DataFrame:
-    
-    # Doplnění indexu pro databázi
-    ratings_df["Ratings-ID"] = ratings_df.index
+    # Přesun sloupce s hash(Rating-ID) na začátek
     ratings_df = ratings_df.iloc[:,[3, 0, 1, 2]]
 
-    # Odstranění ratings pro které nejsou knihy v books
-    valid_isbn = set(books_df["ISBN"].dropna()) 
+    # Odstranění ratings pro které nejsou knihy v books (Pokud se později ty knihy nepřidají)
+    valid_isbn = set(books_df["ISBN"].dropna())
     ratings_df = ratings_df[ratings_df["ISBN"].isin(valid_isbn)]
     
     return ratings_df
 
-def text_basic_preprocessing(df) -> pd.DataFrame:
+def text_basic_preprocessing(df: pd.DataFrame) -> pd.DataFrame:
     # Obyčejní text preprocessing pro normaliziaci
 
-    filtered_columns = df.columns[~df.columns.str.contains("URL|ISBN", regex=True)]
-    df_filtered = df[filtered_columns]
-    object_columns = df_filtered.select_dtypes(include=["object"]).columns
+    object_columns = df.select_dtypes(include=["object"]).columns
+    filtered_columns = object_columns[~object_columns.str.contains("URL|ISBN", regex=True)]
 
-    df.loc[:, object_columns] = df[object_columns].apply(lambda col: col.str.strip().str.title())
+    df.loc[:, filtered_columns] = df[filtered_columns].apply(lambda col: col.str.strip().str.title())
 
     return df
 
-def users_preprocessing(users_df) -> pd.DataFrame:
+def users_preprocessing(users_df: pd.DataFrame) -> pd.DataFrame:
 
     # Rozdělení lokace pro normalizaci dat v databázi
     location_df = users_df["Location"].str.split(",", expand=True, n=2)
@@ -213,7 +220,19 @@ def users_preprocessing(users_df) -> pd.DataFrame:
     users_df = users_df.drop(columns="Location")
     users_df = users_df.iloc[:,[0, 2, 3, 4, 1]]
 
+    # Odstranění duplicit
+    users_df = users_df.drop_duplicates(subset = "User-ID")
+
     return users_df
+
+def repair_encoding(books_df) -> pd.DataFrame:
+
+    # Aplikuj funkci na sloupce s textovými daty
+    columns_to_change = ['Book-Title', 'Book-Author', 'Publisher']
+    for col in columns_to_change:
+        books_df[col] = books_df[col].apply(fix_special_characters)
+
+    return books_df
 
 def connect_to_db():
     DATABASE_URL = os.getenv("DATABASE_URL")
@@ -222,13 +241,13 @@ def connect_to_db():
         try:
             engine = create_engine(DATABASE_URL)
             conn = engine.connect()
-            print("Connection to database successful!")
+            logging.info("Connection to database successful!")
             return conn
         except Exception as error:
-            print(f"Error when connecting to database: {error}")
+            logging.error(f"Error when connecting to database: {error}")
             time.sleep(3)
 
-def insert_into_db(users_df, ratings_df, books_df):
+def insert_into_db(users_df: pd.DataFrame, ratings_df: pd.DataFrame, books_df: pd.DataFrame):
 
     conn = connect_to_db()
     try:
@@ -237,15 +256,16 @@ def insert_into_db(users_df, ratings_df, books_df):
         books_df.to_sql("books", con=conn, schema=None, if_exists="append", index=False)
         ratings_df.to_sql("ratings", con=conn, schema=None, if_exists="append", index=False)
     except Exception as error:
-        print(f"Error when inserting rows. Error: {error}")
+        logging.error(f"Error when inserting rows. Error: {error}")
 
     conn.close()
     
-    print("Succesfully inserted records!")
+    logging.info("Succesfully inserted records!")
 
 
 if __name__ == "__main__":
-    print("Running ETL...")
+    logging.basicConfig(level=logging.INFO, format ="%(asctime)s/%(levelname)s/%(message)s", force=True)
+    logging.info("Running ETL...")
 
     # --- 0. Retry mechanismus pro databázi ---
     connect_to_db()
@@ -255,18 +275,18 @@ if __name__ == "__main__":
 
     # --- 2. Čištění a preprocessing dat ---
     books_df = extract_author_from_title(books_df)
-    books_df = remove_special_scharacters(books_df)
-    books_df = repair_encoding(books_df) 
     books_df = fix_publishing_year(books_df)
+    books_df = remove_special_scharacters(books_df)
+    books_df = repair_encoding(books_df)
     books_df = text_basic_preprocessing(books_df)
-    print("Cleaning Books data done")
+    logging.info("Cleaning Books data done")
 
     users_df = users_preprocessing(users_df) 
     users_df = text_basic_preprocessing(users_df)
-    print("Cleaning Users data done")
+    logging.info("Cleaning Users data done")
 
     ratings_df = ratings_preprocessing(ratings_df, books_df)
-    print("Cleaning Rratings data done")
+    logging.info("Cleaning Rratings data done")
 
     # --- 3. Nahrání dat do databáze ---
     insert_into_db(users_df, ratings_df, books_df)

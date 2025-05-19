@@ -1,53 +1,114 @@
 from flask import Flask, flash, render_template, request, redirect, url_for
 import os
-from sqlalchemy import create_engine
+import logging
+from sqlalchemy import create_engine, Column, String, Float, Integer, ForeignKey
+from sqlalchemy.orm import declarative_base
 import re
 import pandas as pd
 import numpy as np
 import time
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s/%(levelname)s/%(message)s", force=True)
+
 # Zákaldní setup pro app a flash z Flask API
 app = Flask(__name__)
-app.secret_key = "SECRET"
+app.secret_key = os.urandom(24)
 
+# Globání proměnné
 books_data = None
 ratings_data = None
+
+# Deklarování modelů pro ORM
+base = declarative_base()
+
+class Users(base):
+    __tablename__ = "users"
+    user_id = Column(String, primary_key = True)
+    city = Column(String, nullable = True)
+    state = Column(String, nullable = True)
+    country = Column(String, nullable = True)
+    age = Column(Float, nullable = True)
+
+class Books(base):
+    __tablename__ = "books"
+    isbn = Column(String, primary_key = True)
+    book_title = Column(String, nullable = True)
+    book_author = Column(String, nullable = True)
+    year_of_publication = Column(Integer, nullable= True)
+    publisher = Column(String, nullable = True)
+    image_url_s = Column(String, nullable = True)
+    image_url_m = Column(String, nullable = True)
+    image_url_l = Column(String, nullable = True)
+
+class Ratings(base):
+    __tablename__ = "ratings"
+
+    ratings_id = Column(Integer, primary_key = True)
+    user_id = Column(String, ForeignKey("users.user_id"))
+    isbn  = Column(String, ForeignKey("books.isbn"))
+    rating = Column(Integer, nullable = False)
 
 def get_data():
     global books_data, ratings_data
 
     DATABASE_URL = os.getenv("DATABASE_URL")
     if not DATABASE_URL:
-        print("Error ENV varible for Database is not set!")
+        logging.error("Error ENV varible for Database is not set!")
         engine = None
     else:
         while True:
             try:
                 engine = create_engine(DATABASE_URL)
                 conn = engine.connect()
-                print("Connection to database successful!")
+                logging.info("Connection to database successful!")
                 
                 books_data = pd.read_sql_table("books", conn)
                 ratings_data = pd.read_sql_table("ratings", conn)
 
                 if not books_data.empty and not ratings_data.empty:
-                    print("Books and ratings data successfully loaded!")
+                    logging.info("Books and ratings data successfully loaded!")
                     break
                 else:
-                    print("Tables not found in the database.")
+                    logging.warning("Tables not found in the database.")
 
             except Exception as error:
-                print(f"Error when connecting to database: {error}")
+                logging.error(f"Error when connecting to database: {error}")
                 engine = None
                 time.sleep(3)
     conn.close()
     return books_data, ratings_data
 
+# Dotazy na db podle Knihy a autora, mělo by zlepšit čas načtení dat
+def get_data_ORM(bookAuthor, bookTitle):
+    # Přdělení první částí recoommend books, pro získání jen určitých ratings a book ńa zákaldě knihy a autora
+    # Následuje stejnou logiku ale mělo by být rychlejší 
+    author_filtered = Books.book_author.ilike(f"%{bookAuthor}") if bookAuthor else True # Shoda s čimkoliv
+    readers_query = conn.query(Ratings.user_id).distinct().join(Books).filter(
+       Books.book_title.ilike(bookTitle), author_filtered
+    )
+    results_readers = readers_query.all()
+    authors_results = [row[0] for row in results_readers]
+
+    ratings_query = conn.query(
+        Ratings.user_id,
+        Ratings.isbn,
+        Ratings.rating,
+        Books.book_title
+    ).join(Books).filter(
+        Ratings.user_id.in_(authors_results),
+        Ratings.rating != 0
+    )
+
+    results_rating_query = ratings_query.all()
+    merged_dataset = pd.DataFrame(results_rating_query)
+
+    return merged_dataset
+
 def recommend_books(bookAuthor, bookTitle):
     global books_data, ratings_data
+
     # --- Logika z book_rec.py ---
     # Collaborative filtering na základě ostatních uživatelkých recenzí, kteří mají stejnou "chut" 
-    
     # Očištění inputů od uživatele whitespace, malá písmena a speciální znaky
     bookAuthor = bookAuthor.lower().strip()
     bookTitle = bookTitle.lower().strip()
@@ -59,9 +120,9 @@ def recommend_books(bookAuthor, bookTitle):
         books_data, ratings_data = get_data()
 
     # Načtení z databáze
-    books_df = books_data.copy()
+    books_df = books_data
 
-    ratings_df = ratings_data.copy()
+    ratings_df = ratings_data
     ratings_df = ratings_df[ratings_df["Book-Rating"] != 0] 
 
     #users_df = pd.read_sql_table("users", conn)
@@ -84,12 +145,12 @@ def recommend_books(bookAuthor, bookTitle):
     # Number of ratings per other books in dataset
     number_of_rating_per_book = books_of_author_readers.groupby(["Book-Title"]).agg("count").reset_index()
 
-    # Vybere jen ty knížky, které byly ohodnoceny 8 a více lidmi (Jak přišli na tuto hranici?)
+    # Vybere jen ty knížky, které byly ohodnoceny 8 a více lidmi (Jak přišli na tuto hranici?, zaměnil jsem za 5 pro testování)
     #select only books which have actually higher number of ratings than threshold
     books_to_compare = number_of_rating_per_book["Book-Title"][number_of_rating_per_book["User-ID"] >= 5]
     books_to_compare = books_to_compare.tolist()
 
-    # Dataset s každým ratingem od uživatele podle knížek které byly hodnoceny 8 a více lidmi (zaměnil jsem za 5 pro testování)
+    # Dataset s každým ratingem od uživatele podle knížek které byly hodnoceny 8 a více lidmi 
     ratings_data_raw = books_of_author_readers[["User-ID", "Book-Rating", "Book-Title"]][books_of_author_readers["Book-Title"].isin(books_to_compare)]
 
     # Vypočte průměrný rating pro každou knížku od každého uživatele? 
@@ -191,20 +252,14 @@ def reload_data():
     try:
         books_data, ratings_data = get_data()
         if books_data is not None and ratings_data is not None:
-            print("Data succesfully reloaded")
+            logging.info("Data succesfully reloaded")
             return redirect(url_for("index"))
         else:
-            print("Data not reloaded!")
+            logging.warning("Data not reloaded!")
             return redirect(url_for("index"))
     except Exception as error:
-        print(f"Error: {error}")
+        logging.error(f"Error: {error}")
         return redirect(url_for("index"))
 
 if __name__ == '__main__':
     app.run(debug=True)
-
-   
-
-
-
-
